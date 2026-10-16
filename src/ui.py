@@ -14,10 +14,13 @@ from aqt.qt import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     Qt,
     QTableWidget,
     QTableWidgetItem,
+    QTimer,
     QVBoxLayout,
     qconnect,
 )
@@ -28,9 +31,12 @@ from .github import GithubError, fetch_release
 from .manager import (
     AssetNotInRelease,
     check_catalog,
+    configured_interval_hours,
     configured_max_bytes,
+    due_repositories,
     is_duplicate,
     make_subscription,
+    pending_updates,
 )
 from .runner import start_installs
 from .store import (
@@ -45,11 +51,13 @@ from .store import (
 from . import strings
 
 _dialog: ManagerDialog | None = None
+_startup_started = False
 
 
 def register() -> None:
     gui_hooks.main_window_did_init.append(_add_menu)
-    gui_hooks.profile_will_close.append(_close_dialog)
+    gui_hooks.profile_did_open.append(_schedule_startup)
+    gui_hooks.profile_will_close.append(_close_profile)
 
 
 def _add_menu() -> None:
@@ -71,11 +79,103 @@ def open_manager(*_args: object) -> None:
     _dialog.refresh()
 
 
+def _close_profile() -> None:
+    global _startup_started
+    _startup_started = False
+    _close_dialog()
+
+
 def _close_dialog() -> None:
     global _dialog
     if _dialog is not None:
         _dialog.close()
         _dialog = None
+
+
+def _schedule_startup() -> None:
+    # profile_did_open runs while the main window is still settling.
+    QTimer.singleShot(0, _startup_check)
+
+
+def _startup_check() -> None:
+    global _startup_started
+    if _startup_started or mw.col is None:
+        return
+    _startup_started = True
+    try:
+        catalog = _read_catalog()
+        config = mw.addonManager.getConfig("deck_manager")
+        due = due_repositories(
+            catalog,
+            datetime.now(timezone.utc),
+            configured_interval_hours(config),
+        )
+        if not due:
+            _offer_updates(catalog)
+            return
+    except Exception:
+        return
+
+    def op(_col: object) -> Catalog:
+        return check_catalog(catalog, _fetch_latest, _now(), only=due)
+
+    def success(updated: Catalog) -> None:
+        try:
+            _write_catalog(updated)
+            if _dialog is not None:
+                _dialog.refresh()
+            _offer_updates(updated)
+        except Exception:
+            return
+
+    def failure(_exc: Exception) -> None:
+        return
+
+    (
+        QueryOp(parent=mw, op=op, success=success)
+        .failure(failure)
+        .without_collection()
+        .run_in_background()
+    )
+
+
+def _offer_updates(catalog: Catalog) -> None:
+    if _dialog is not None and _dialog._busy:
+        return
+    updates = pending_updates(catalog)
+    if not updates:
+        return
+    chosen = _ask_updates(updates)
+    if chosen:
+        _begin_install(list(chosen))
+
+
+def _ask_updates(updates: tuple) -> list[str]:
+    notice = UpdateNotice(mw, updates)
+    if not notice.exec():
+        return []
+    return notice.chosen_ids()
+
+
+def _begin_install(subscription_ids: list[str]) -> None:
+    if _dialog is not None:
+        _dialog._install(subscription_ids)
+        return
+    catalog = _read_catalog()
+    config = mw.addonManager.getConfig("deck_manager")
+
+    def finished(updated: Catalog) -> None:
+        _write_catalog(updated)
+        if _dialog is not None:
+            _dialog.refresh()
+
+    start_installs(
+        mw,
+        catalog,
+        subscription_ids,
+        max_bytes=configured_max_bytes(config),
+        on_finished=finished,
+    )
 
 
 class ManagerDialog(QDialog):
@@ -266,6 +366,53 @@ class ManagerDialog(QDialog):
             showInfo(strings.NO_SELECTION, parent=self, title=strings.WINDOW_TITLE)
             return None
         return next((item for item in _read_catalog().subscriptions if item.id == ids[0]), None)
+
+
+class UpdateNotice(QDialog):
+    def __init__(self, parent: object, updates: tuple) -> None:
+        super().__init__(parent)  # type: ignore[arg-type]
+        self._updates = updates
+        self.setWindowTitle(strings.updates_title(len(updates)))
+        self.resize(480, 220 if len(updates) > 1 else 140)
+        layout = QVBoxLayout(self)
+        if len(updates) == 1:
+            notice = QLabel(strings.update_notice(updates[0]))
+            notice.setWordWrap(True)
+            layout.addWidget(notice)
+            self._list = None
+        else:
+            heading = QLabel(strings.updates_title(len(updates)))
+            layout.addWidget(heading)
+            self._list = QListWidget()
+            for subscription in updates:
+                item = QListWidgetItem(strings.update_notice(subscription))
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked)
+                item.setData(Qt.ItemDataRole.UserRole, subscription.id)
+                self._list.addItem(item)
+            layout.addWidget(self._list)
+        later = QPushButton(strings.LATER)
+        later.setDefault(True)
+        install = QPushButton(strings.IMPORT)
+        qconnect(later.clicked, self.reject)
+        qconnect(install.clicked, self.accept)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        buttons.addWidget(later)
+        buttons.addWidget(install)
+        layout.addLayout(buttons)
+
+    def chosen_ids(self) -> list[str]:
+        if self._list is None:
+            return [self._updates[0].id]
+        chosen: list[str] = []
+        for index in range(self._list.count()):
+            item = self._list.item(index)
+            if item.checkState() == Qt.CheckState.Checked:
+                value = item.data(Qt.ItemDataRole.UserRole)
+                if isinstance(value, str):
+                    chosen.append(value)
+        return chosen
 
 
 class AddDialog(QDialog):

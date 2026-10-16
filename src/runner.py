@@ -7,14 +7,12 @@ emits ``finished``.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from tempfile import mkstemp
 
 from .domain import compare_subscription, status_of
-from .download import DownloadError, download_asset, urllib_open
+from .download import DownloadError, discard_package, download_asset, temporary_package, urllib_open
 from .github import GithubError
 from .install import Prepared, load_latest, run_install_queue
 from .store import Catalog
@@ -49,9 +47,7 @@ def start_installs(
                 asset = next(
                     item for item in release.assets if item.name == subscription.asset_name
                 )
-                handle, name = mkstemp(suffix=".apkg")
-                os.close(handle)
-                path = Path(name)
+                path = temporary_package(asset.name)
                 download_asset(
                     asset.download_url,
                     path,
@@ -62,8 +58,7 @@ def start_installs(
                 )
                 return Prepared(release=release, path=path)
             except (GithubError, DownloadError) as exc:
-                if path is not None:
-                    path.unlink(missing_ok=True)
+                discard_package(path)
                 return Prepared(release=release, error=exc.code)
 
         def success(prepared: Prepared) -> None:

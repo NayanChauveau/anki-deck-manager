@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 
-from .domain import GithubSource, ReleaseInfo, Subscription, apkg_assets
+from .domain import (
+    GithubSource,
+    ReleaseInfo,
+    Subscription,
+    apkg_assets,
+    check_is_due,
+    status_of,
+)
 from .github import FetchResult, GithubError
 from .store import (
     Catalog,
@@ -15,6 +23,7 @@ from .store import (
 )
 
 DEFAULT_MAX_BYTES = 536870912
+DEFAULT_INTERVAL_HOURS = 24
 
 
 class AssetNotInRelease(Exception):
@@ -51,10 +60,42 @@ def make_subscription(
     )
 
 
+def due_repositories(
+    catalog: Catalog, now: datetime, interval_hours: int
+) -> set[tuple[str, str]]:
+    """Repositories whose newest check is older than the interval."""
+    newest: dict[tuple[str, str], str | None] = {}
+    for subscription in catalog.subscriptions:
+        key = (subscription.owner.casefold(), subscription.repository.casefold())
+        checked = subscription.last_checked_at
+        if key not in newest:
+            newest[key] = checked
+            continue
+        current = newest[key]
+        if current is None or checked is None:
+            newest[key] = None
+        elif checked > current:
+            newest[key] = checked
+    return {
+        key
+        for key, checked in newest.items()
+        if check_is_due(checked, now, interval_hours)
+    }
+
+
+def pending_updates(catalog: Catalog) -> tuple[Subscription, ...]:
+    return tuple(
+        subscription
+        for subscription in catalog.subscriptions
+        if status_of(subscription) == "update_available"
+    )
+
+
 def check_catalog(
     catalog: Catalog,
     fetch: Callable[[str, str, str | None], FetchResult],
     checked_at: str,
+    only: set[tuple[str, str]] | None = None,
 ) -> Catalog:
     """Refresh each repository once. ``fetch`` may raise :class:`GithubError`."""
     seen: set[tuple[str, str]] = set()
@@ -63,6 +104,8 @@ def check_catalog(
         if key in seen:
             continue
         seen.add(key)
+        if only is not None and key not in only:
+            continue
         etag = repo_etag(catalog, subscription.owner, subscription.repository)
         try:
             result = fetch(subscription.owner, subscription.repository, etag)
@@ -102,6 +145,15 @@ def check_catalog(
             etag=result.etag,
         )
     return catalog
+
+
+def configured_interval_hours(config: object) -> int:
+    if not isinstance(config, dict):
+        return DEFAULT_INTERVAL_HOURS
+    value = config.get("check_interval_hours", DEFAULT_INTERVAL_HOURS)
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return DEFAULT_INTERVAL_HOURS
 
 
 def configured_max_bytes(config: object) -> int:

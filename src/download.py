@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
+from tempfile import mkdtemp
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -52,6 +53,31 @@ class DownloadResponse:
 
 
 OpenUrl = Callable[[str], DownloadResponse]
+
+
+def temporary_package(asset_name: str) -> Path:
+    """A temp file whose name is the asset name Anki will show."""
+    folder = Path(mkdtemp(prefix="deck-manager-"))
+    return folder / _package_filename(asset_name)
+
+
+def discard_package(path: Path | None) -> None:
+    if path is None:
+        return
+    path.unlink(missing_ok=True)
+    parent = path.parent
+    if parent.name.startswith("deck-manager-"):
+        try:
+            parent.rmdir()
+        except OSError:
+            return
+
+
+def _package_filename(asset_name: str) -> str:
+    name = Path(asset_name).name
+    if name in {"", ".", ".."} or not name.lower().endswith(".apkg"):
+        return "deck.apkg"
+    return name
 
 
 def require_download_url(url: str) -> None:

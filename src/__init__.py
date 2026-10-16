@@ -1,8 +1,4 @@
-"""Deck Manager add-on entry point.
-
-Anki loads this package from the add-on folder. The startup check is
-intentionally absent at this stage.
-"""
+"""Deck Manager add-on entry point."""
 
 from __future__ import annotations
 

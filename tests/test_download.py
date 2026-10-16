@@ -2,7 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from src.download import DownloadError, DownloadResponse, download_asset, require_download_url
+from src.download import (
+    DownloadError,
+    DownloadResponse,
+    discard_package,
+    download_asset,
+    require_download_url,
+    temporary_package,
+)
 
 _URL = "https://github.com/NayanChauveau/wine-theory-anki/releases/download/v1.2.0/deck.apkg"
 
@@ -123,6 +130,22 @@ def test_cancel_between_chunks_deletes_the_file(tmp_path: Path) -> None:
         )
     assert caught.value.code == "cancelled"
     assert not destination.exists()
+
+
+def test_the_temp_file_uses_the_asset_name() -> None:
+    path = temporary_package("folder/wset3-test-fr.apkg")
+    try:
+        assert path.name == "wset3-test-fr.apkg"
+        assert path.parent.name.startswith("deck-manager-")
+    finally:
+        discard_package(path)
+    assert not path.exists()
+    assert not path.parent.exists()
+    fallback = temporary_package("notes.txt")
+    try:
+        assert fallback.name == "deck.apkg"
+    finally:
+        discard_package(fallback)
 
 
 def test_download_hosts() -> None:

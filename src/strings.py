@@ -35,6 +35,7 @@ DUPLICATE = "Ce fichier est déjà suivi."
 ASSET_MISSING = "Ce fichier est absent de la release."
 CHECKING = "Vérification…"
 DOWNLOADING = "Téléchargement"
+LATER = "Plus tard"
 
 
 def version_text(subscription: Subscription) -> str:
@@ -75,6 +76,21 @@ def url_error_text(code: str) -> str:
         "owner": "Nom du propriétaire invalide.",
         "repository": "Nom du dépôt invalide.",
     }.get(code, "URL refusée.")
+
+
+def updates_title(count: int) -> str:
+    if count == 1:
+        return "Mise à jour disponible"
+    return f"{count} mises à jour disponibles"
+
+
+def update_notice(subscription: Subscription) -> str:
+    installed = subscription.installed_version or "—"
+    available = subscription.available_version or "—"
+    return (
+        f"{subscription.display_name} : {installed} est installée, "
+        f"{available} est disponible."
+    )
 
 
 def removal_message(names: list[str]) -> str:

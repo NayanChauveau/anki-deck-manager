@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from .download import discard_package
 from .domain import (
     GithubSource,
     ReleaseAsset,
@@ -178,5 +179,4 @@ def _mark(catalog: Catalog, subscription_id: str, code: str, checked_at: str) ->
 
 
 def _unlink(path: Path | None) -> None:
-    if path is not None:
-        path.unlink(missing_ok=True)
+    discard_package(path)

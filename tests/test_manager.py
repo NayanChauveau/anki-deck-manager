@@ -1,11 +1,16 @@
 from src.domain import GithubSource, ReleaseAsset, ReleaseInfo, Subscription
 from src.github import FetchResult, GithubError
+from datetime import datetime, timedelta, timezone
+
 from src.manager import (
     AssetNotInRelease,
     check_catalog,
+    configured_interval_hours,
     configured_max_bytes,
+    due_repositories,
     is_duplicate,
     make_subscription,
+    pending_updates,
 )
 from src.store import add_subscription, empty_catalog
 from src import strings
@@ -133,7 +138,64 @@ def test_version_and_removal_copy() -> None:
     assert "vX.Y.Z" in strings.url_error_text("path")
 
 
+def test_a_recent_repository_is_not_checked_again() -> None:
+    now = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    recent = (now - timedelta(hours=1)).isoformat()
+    old = (now - timedelta(hours=25)).isoformat()
+    catalog = add_subscription(
+        empty_catalog(),
+        _subscription("fr", "wset3-vin-fr.apkg", last_checked_at=recent),
+    )
+    catalog = add_subscription(
+        catalog,
+        _subscription(
+            "other",
+            "wset3-vin-fr.apkg",
+            owner="Other",
+            repository="deck",
+            repo_url="https://github.com/Other/deck",
+            last_checked_at=old,
+        ),
+    )
+    due = due_repositories(catalog, now, 24)
+    assert due == {("other", "deck")}
+    calls: list[str] = []
+
+    def fetch(owner: str, repository: str, etag: str | None) -> FetchResult:
+        calls.append(owner)
+        return FetchResult(release=_release("v1.3.0"), etag=None, not_modified=False)
+
+    updated = check_catalog(catalog, fetch, now.isoformat(), only=due)
+    assert calls == ["Other"]
+    assert updated.subscriptions[0].installed_version == "v1.0.0"
+    assert pending_updates(updated)[0].id == "other"
+    assert strings.updates_title(1) == "Mise à jour disponible"
+    assert "v1.0.0 est installée, v1.3.0 est disponible" in strings.update_notice(
+        pending_updates(updated)[0]
+    )
+    assert strings.updates_title(2) == "2 mises à jour disponibles"
+
+
+def test_a_known_update_stays_pending_before_the_next_check() -> None:
+    now = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    recent = (now - timedelta(hours=1)).isoformat()
+    catalog = add_subscription(
+        empty_catalog(),
+        _subscription(
+            "fr",
+            "wset3-vin-fr.apkg",
+            last_checked_at=recent,
+            available_version="v2.0.0",
+            available_release_id=3,
+        ),
+    )
+    assert due_repositories(catalog, now, 24) == set()
+    assert [item.id for item in pending_updates(catalog)] == ["fr"]
+
+
 def test_download_cap_comes_from_addon_config() -> None:
     assert configured_max_bytes(None) == 536870912
     assert configured_max_bytes({"max_download_bytes": 10}) == 10
     assert configured_max_bytes({"max_download_bytes": 0}) == 536870912
+    assert configured_interval_hours(None) == 24
+    assert configured_interval_hours({"check_interval_hours": 6}) == 6
