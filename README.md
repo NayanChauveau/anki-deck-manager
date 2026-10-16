@@ -2,7 +2,7 @@
 
 Add-on pour Anki Desktop. Il installe un deck `.apkg` publié sur GitHub, et propose une mise à jour quand le numéro de version change.
 
-Anki **26.09** ou plus récent. Menu **Outils → Deck Manager**. Pas de compte et pas de token : les dépôts suivis sont publics. La fenêtre est en français.
+Anki **26.09** ou plus récent. Menu **Outils → Deck Manager**. Pas de compte et pas de token : les dépôts suivis sont publics. La fenêtre suit la langue d’Anki : français ou anglais. Les autres langues utilisent l’anglais.
 
 ## Installer
 
