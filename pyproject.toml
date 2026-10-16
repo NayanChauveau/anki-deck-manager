@@ -1,0 +1,12 @@
+[project]
+name = "deck-manager"
+version = "0.0.0"
+requires-python = ">=3.13"
+description = "Anki add-on that installs and updates decks from GitHub releases."
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
