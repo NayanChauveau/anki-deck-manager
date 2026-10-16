@@ -120,7 +120,7 @@ Il n’y a pas d’interrupteur pour désactiver un suivi.
 
 Le contrat ci-dessus est celui du produit. Le code présent couvre la lecture de l’URL, l’API GitHub, la comparaison des numéros, le stockage, le téléchargement (hôtes, taille, annulation entre les blocs) et l’import un fichier à la fois. La version n’est enregistrée que si le dialogue Anki confirme l’import. Ces chemins sont testés sans lancer Anki.
 
-Pas encore visibles dans Anki : la fenêtre, le menu Outils, la notification au démarrage. Redémarrer Anki ne montre donc pas encore Deck Manager dans les menus.
+Le menu **Outils → Deck Manager** ouvre la fenêtre : ajout par URL, vérification, import des mises à jour, ouverture du dépôt, retrait du suivi. Retirer un suivi laisse le deck dans Anki. La notification au démarrage n’est pas encore branchée. Redémarrer Anki pour voir le menu.
 
 Installation de développement, une fois Anki 26.09 ouvert au moins une fois :
 
