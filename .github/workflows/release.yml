@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Test
+        run: |
+          pip install pytest
+          pytest -q
+
+      - name: Next version
+        id: version
+        run: |
+          latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+          if [ -z "$latest" ]; then
+            next=v0.1.0
+          else
+            ver=${latest#v}
+            major=${ver%%.*}
+            rest=${ver#*.}
+            minor=${rest%%.*}
+            patch=${rest#*.}
+            next="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Package
+        run: |
+          cd src
+          zip -r "../deck-manager-${{ steps.version.outputs.tag }}.ankiaddon" * \
+            -x '*__pycache__*' '*.pyc' '.DS_Store'
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "Deck Manager ${{ steps.version.outputs.tag }}" \
+            --generate-notes \
+            "deck-manager-${{ steps.version.outputs.tag }}.ankiaddon"
