@@ -1,4 +1,4 @@
-from outcome import import_was_confirmed
+from src.outcome import import_was_confirmed
 
 
 def test_closing_the_modal_dialog_is_not_an_import() -> None:
