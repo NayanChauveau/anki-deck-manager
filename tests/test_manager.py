@@ -1,4 +1,4 @@
-from src.domain import GithubSource, ReleaseAsset, ReleaseInfo, Subscription
+from src.domain import GithubSource, ReleaseAsset, ReleaseInfo, Subscription, status_of
 from src.github import FetchResult, GithubError
 from datetime import datetime, timedelta, timezone
 
@@ -144,7 +144,12 @@ def test_a_recent_repository_is_not_checked_again() -> None:
     old = (now - timedelta(hours=25)).isoformat()
     catalog = add_subscription(
         empty_catalog(),
-        _subscription("fr", "wset3-vin-fr.apkg", last_checked_at=recent),
+        _subscription(
+            "fr",
+            "wset3-vin-fr.apkg",
+            last_checked_at=recent,
+            available_version="v9.0.0",
+        ),
     )
     catalog = add_subscription(
         catalog,
@@ -168,10 +173,11 @@ def test_a_recent_repository_is_not_checked_again() -> None:
     updated = check_catalog(catalog, fetch, now.isoformat(), only=due)
     assert calls == ["Other"]
     assert updated.subscriptions[0].installed_version == "v1.0.0"
-    assert pending_updates(updated)[0].id == "other"
+    assert updated.subscriptions[0].available_version == "v9.0.0"
+    assert [item.id for item in pending_updates(updated)] == ["fr", "other"]
     assert strings.updates_title(1) == "Mise à jour disponible"
     assert "v1.0.0 est installée, v1.3.0 est disponible" in strings.update_notice(
-        pending_updates(updated)[0]
+        pending_updates(updated)[1]
     )
     assert strings.updates_title(2) == "2 mises à jour disponibles"
 
@@ -187,10 +193,12 @@ def test_a_known_update_stays_pending_before_the_next_check() -> None:
             last_checked_at=recent,
             available_version="v2.0.0",
             available_release_id=3,
+            last_error="rate_limited",
         ),
     )
     assert due_repositories(catalog, now, 24) == set()
     assert [item.id for item in pending_updates(catalog)] == ["fr"]
+    assert status_of(catalog.subscriptions[0]) == "error"
 
 
 def test_download_cap_comes_from_addon_config() -> None:

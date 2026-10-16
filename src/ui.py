@@ -26,8 +26,8 @@ from aqt.qt import (
 )
 from aqt.utils import askUser, openLink, showInfo, showWarning
 
-from .domain import GithubSource, UrlError, parse_github_url, status_of
-from .github import GithubError, fetch_release
+from .domain import GithubSource, UrlError, parse_github_url
+from .github import GithubError, fetch_latest, fetch_tag
 from .manager import (
     AssetNotInRelease,
     check_catalog,
@@ -46,12 +46,16 @@ from .store import (
     add_subscription,
     dump_catalog,
     load_catalog,
+    merge_checked,
+    merge_installed,
     remove_subscription,
 )
 from . import strings
 
 _dialog: ManagerDialog | None = None
 _startup_started = False
+_busy = False
+_epoch = 0
 
 
 def register() -> None:
@@ -80,8 +84,10 @@ def open_manager(*_args: object) -> None:
 
 
 def _close_profile() -> None:
-    global _startup_started
+    global _startup_started, _epoch
     _startup_started = False
+    _epoch += 1
+    _set_busy(False)
     _close_dialog()
 
 
@@ -99,9 +105,11 @@ def _schedule_startup() -> None:
 
 def _startup_check() -> None:
     global _startup_started
-    if _startup_started or mw.col is None:
+    if _startup_started or _busy or mw.col is None:
         return
     _startup_started = True
+    collection = mw.col
+    epoch = _epoch
     try:
         catalog = _read_catalog()
         config = mw.addonManager.getConfig("deck_manager")
@@ -111,25 +119,31 @@ def _startup_check() -> None:
             configured_interval_hours(config),
         )
         if not due:
-            _offer_updates(catalog)
+            _offer_updates(catalog, collection, epoch)
             return
     except Exception:
         return
+
+    baseline_ids = {item.id for item in catalog.subscriptions}
+    _set_busy(True)
 
     def op(_col: object) -> Catalog:
         return check_catalog(catalog, _fetch_latest, _now(), only=due)
 
     def success(updated: Catalog) -> None:
-        try:
-            _write_catalog(updated)
-            if _dialog is not None:
-                _dialog.refresh()
-            _offer_updates(updated)
-        except Exception:
+        if _epoch != epoch:
             return
+        _finish_check(collection, baseline_ids, updated)
+        _set_busy(False)
+        if mw.col is collection:
+            _offer_updates(_read_catalog(), collection, epoch)
 
     def failure(_exc: Exception) -> None:
-        return
+        if _epoch != epoch:
+            return
+        _set_busy(False)
+        if mw.col is collection:
+            _offer_updates(_read_catalog(), collection, epoch)
 
     (
         QueryOp(parent=mw, op=op, success=success)
@@ -139,15 +153,19 @@ def _startup_check() -> None:
     )
 
 
-def _offer_updates(catalog: Catalog) -> None:
-    if _dialog is not None and _dialog._busy:
+def _offer_updates(catalog: Catalog, collection: object, epoch: int) -> None:
+    if _busy or _epoch != epoch or mw.col is not collection:
         return
     updates = pending_updates(catalog)
     if not updates:
         return
+    _set_busy(True)
     chosen = _ask_updates(updates)
-    if chosen:
-        _begin_install(list(chosen))
+    if _epoch != epoch:
+        return
+    _set_busy(False)
+    if chosen and mw.col is collection:
+        _start_install(list(chosen), collection)
 
 
 def _ask_updates(updates: tuple) -> list[str]:
@@ -157,17 +175,24 @@ def _ask_updates(updates: tuple) -> list[str]:
     return notice.chosen_ids()
 
 
-def _begin_install(subscription_ids: list[str]) -> None:
-    if _dialog is not None:
-        _dialog._install(subscription_ids)
+def _start_install(subscription_ids: list[str], collection: object) -> None:
+    if _busy or mw.col is not collection:
         return
     catalog = _read_catalog()
+    baseline_ids = {item.id for item in catalog.subscriptions}
     config = mw.addonManager.getConfig("deck_manager")
+    epoch = _epoch
+    _set_busy(True)
 
     def finished(updated: Catalog) -> None:
-        _write_catalog(updated)
-        if _dialog is not None:
-            _dialog.refresh()
+        if _epoch != epoch or mw.col is not collection:
+            return
+        try:
+            _write_catalog(merge_installed(_read_catalog(), baseline_ids, updated))
+            if _dialog is not None:
+                _dialog.refresh()
+        finally:
+            _set_busy(False)
 
     start_installs(
         mw,
@@ -178,10 +203,28 @@ def _begin_install(subscription_ids: list[str]) -> None:
     )
 
 
+def _finish_check(collection: object, baseline_ids: set[str], updated: Catalog) -> None:
+    if mw.col is not collection:
+        return
+    try:
+        _write_catalog(merge_checked(_read_catalog(), baseline_ids, updated))
+        if _dialog is not None:
+            _dialog.refresh()
+    except Exception:
+        return
+
+
+def _set_busy(busy: bool) -> None:
+    global _busy
+    _busy = busy
+    if _dialog is not None:
+        _dialog._busy = busy
+
+
 class ManagerDialog(QDialog):
     def __init__(self, parent: object) -> None:
         super().__init__(parent)  # type: ignore[arg-type]
-        self._busy = False
+        self._busy = _busy
         self.setWindowTitle(strings.WINDOW_TITLE)
         self.resize(760, 420)
         self.table = QTableWidget(0, 4)
@@ -253,33 +296,40 @@ class ManagerDialog(QDialog):
         self.empty.setVisible(not catalog.subscriptions)
 
     def _add(self) -> None:
-        if self._busy:
+        if _busy or mw.col is None:
             return
         dialog = AddDialog(self, _read_catalog())
         if dialog.exec() and dialog.subscription_id:
             self.refresh()
-            self._install([dialog.subscription_id])
+            _start_install([dialog.subscription_id], mw.col)
 
     def _check(self) -> None:
-        if self._busy:
+        if _busy or mw.col is None:
             return
         catalog = _read_catalog()
         if not catalog.subscriptions:
             return
-        self._busy = True
+        collection = mw.col
+        baseline_ids = {item.id for item in catalog.subscriptions}
         checked_at = _now()
+        epoch = _epoch
+        _set_busy(True)
 
         def op(_col: object) -> Catalog:
             return check_catalog(catalog, _fetch_latest, checked_at)
 
         def success(updated: Catalog) -> None:
-            _write_catalog(updated)
-            self._busy = False
-            self.refresh()
+            if _epoch != epoch:
+                return
+            _finish_check(collection, baseline_ids, updated)
+            _set_busy(False)
 
         def failure(_exc: Exception) -> None:
-            self._busy = False
-            showWarning(strings.error_text("http_error"), parent=self, title=strings.WINDOW_TITLE)
+            if _epoch != epoch:
+                return
+            _set_busy(False)
+            if mw.col is collection:
+                showWarning(strings.error_text("http_error"), parent=self, title=strings.WINDOW_TITLE)
 
         (
             QueryOp(parent=self, op=op, success=success)
@@ -289,37 +339,19 @@ class ManagerDialog(QDialog):
         )
 
     def _import(self) -> None:
-        if self._busy:
+        if _busy or mw.col is None:
             return
         catalog = _read_catalog()
         chosen = self._selected_ids() or [item.id for item in catalog.subscriptions]
         pending = [
             subscription.id
             for subscription in catalog.subscriptions
-            if subscription.id in chosen and status_of(subscription) == "update_available"
+            if subscription.id in chosen and subscription.available_version
         ]
         if not pending:
             showInfo(strings.NO_UPDATE, parent=self, title=strings.WINDOW_TITLE)
             return
-        self._install(pending)
-
-    def _install(self, subscription_ids: list[str]) -> None:
-        self._busy = True
-        catalog = _read_catalog()
-        config = mw.addonManager.getConfig("deck_manager")
-
-        def finished(updated: Catalog) -> None:
-            _write_catalog(updated)
-            self._busy = False
-            self.refresh()
-
-        start_installs(
-            mw,
-            catalog,
-            subscription_ids,
-            max_bytes=configured_max_bytes(config),
-            on_finished=finished,
-        )
+        _start_install(pending, mw.col)
 
     def _open_repo(self) -> None:
         subscription = self._one_selected()
@@ -328,7 +360,7 @@ class ManagerDialog(QDialog):
         openLink(subscription.repo_url)
 
     def _remove(self) -> None:
-        if self._busy:
+        if _busy:
             return
         ids = self._selected_ids()
         catalog = _read_catalog()
@@ -451,7 +483,7 @@ class AddDialog(QDialog):
         self.add_button.setEnabled(False)
 
         def op(_col: object) -> tuple[GithubSource, object]:
-            result = fetch_release(source, latest=False)
+            result = fetch_tag(source.owner, source.repository, source.version)
             if result.release is None:
                 raise GithubError("http_error")
             return source, result.release
@@ -465,7 +497,7 @@ class AddDialog(QDialog):
                 showWarning(strings.ASSET_MISSING, parent=self, title=strings.ADD_TITLE)
                 return
             try:
-                updated = add_subscription(self._catalog, subscription)
+                updated = add_subscription(_read_catalog(), subscription)
             except DuplicateSubscription:
                 self.add_button.setEnabled(True)
                 showWarning(strings.DUPLICATE, parent=self, title=strings.ADD_TITLE)
@@ -500,14 +532,7 @@ def _write_catalog(catalog: Catalog) -> None:
 
 
 def _fetch_latest(owner: str, repository: str, etag: str | None):
-    source = GithubSource(
-        owner=owner,
-        repository=repository,
-        repo_url=f"https://github.com/{owner}/{repository}",
-        version="0.0.0",
-        asset_name="deck.apkg",
-    )
-    return fetch_release(source, latest=True, etag=etag)
+    return fetch_latest(owner, repository, etag=etag)
 
 
 def _now() -> str:

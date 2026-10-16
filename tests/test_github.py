@@ -115,7 +115,19 @@ def test_http_errors(status: int, code: str) -> None:
 
 
 def test_redirects_leave_the_github_api() -> None:
+    from src.github import _ApiRedirectHandler
+
     with pytest.raises(GithubError) as caught:
         require_api_url("https://example.invalid/steal")
     assert caught.value.code == "redirect_rejected"
     require_api_url("https://api.github.com/repos/o/r/releases/latest")
+    with pytest.raises(GithubError) as caught:
+        _ApiRedirectHandler().redirect_request(
+            None,
+            None,
+            302,
+            "Found",
+            {},
+            "https://evil.example/steal",
+        )
+    assert caught.value.code == "redirect_rejected"

@@ -7,19 +7,12 @@ No Anki imports: the caller supplies the download and the import dialog.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .download import discard_package
-from .domain import (
-    GithubSource,
-    ReleaseAsset,
-    ReleaseInfo,
-    Subscription,
-    compare_subscription,
-    status_of,
-)
-from .github import GithubError, fetch_release
+from .domain import ReleaseInfo, Subscription, commit_install, status_of
+from .github import GithubError, fetch_latest
 from .store import Catalog, apply_release
 
 
@@ -36,40 +29,10 @@ ImportFile = Callable[[Path, Callable[[bool], None]], None]
 
 def load_latest(subscription: Subscription) -> ReleaseInfo:
     """Read the stable release. The version stored on the subscription is not used."""
-    source = GithubSource(
-        owner=subscription.owner,
-        repository=subscription.repository,
-        repo_url=subscription.repo_url,
-        version=subscription.installed_version or "0.0.0",
-        asset_name=subscription.asset_name,
-    )
-    result = fetch_release(source, latest=True)
+    result = fetch_latest(subscription.owner, subscription.repository)
     if result.release is None:
         raise GithubError("http_error")
     return result.release
-
-
-def commit_install(
-    subscription: Subscription,
-    release: ReleaseInfo,
-    *,
-    installed_at: str,
-) -> Subscription:
-    asset = _asset(subscription, release)
-    return Subscription(
-        **{
-            **subscription.__dict__,
-            "display_name": asset.display_name if asset else subscription.display_name,
-            "installed_release_id": release.release_id,
-            "installed_version": release.tag,
-            "installed_asset_id": asset.asset_id if asset else subscription.installed_asset_id,
-            "available_release_id": None,
-            "available_version": None,
-            "available_asset_id": None,
-            "last_installed_at": installed_at,
-            "last_error": None,
-        }
-    )
 
 
 def run_install_queue(
@@ -141,18 +104,17 @@ def run_install_queue(
                 import_file(prepared.path, after_import)
             except Exception:
                 _unlink(prepared.path)
-                raise
+                state["catalog"] = _mark(
+                    state["catalog"],
+                    subscription_id,
+                    "http_error",
+                    checked_at(),
+                )
+                advance()
 
         prepare(current, after_prepare)
 
     advance()
-
-
-def _asset(subscription: Subscription, release: ReleaseInfo) -> ReleaseAsset | None:
-    return next(
-        (asset for asset in release.assets if asset.name == subscription.asset_name),
-        None,
-    )
 
 
 def _find(catalog: Catalog, subscription_id: str) -> Subscription | None:
@@ -174,7 +136,7 @@ def _mark(catalog: Catalog, subscription_id: str, code: str, checked_at: str) ->
         return catalog
     return _replace(
         catalog,
-        Subscription(**{**current.__dict__, "last_error": code, "last_checked_at": checked_at}),
+        replace(current, last_error=code, last_checked_at=checked_at),
     )
 
 

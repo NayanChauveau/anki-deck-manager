@@ -10,6 +10,8 @@ from src.store import (
     dump_catalog,
     empty_catalog,
     load_catalog,
+    merge_checked,
+    merge_installed,
     remove_subscription,
 )
 
@@ -88,6 +90,8 @@ def test_not_modified_only_refreshes_the_check_time() -> None:
     )
     subscription = catalog.subscriptions[0]
     assert subscription.available_version == "v9.9.9"
+    assert subscription.available_release_id == 9
+    assert subscription.etag == '"old"'
     assert subscription.last_checked_at == "2026-10-16T01:00:00+00:00"
     assert subscription.installed_version == "v1.2.0"
 
@@ -117,3 +121,59 @@ def test_catalog_roundtrip_and_removal() -> None:
 def test_unknown_schema_is_rejected() -> None:
     with pytest.raises(ValueError):
         load_catalog({"version": 2, "subscriptions": []})
+
+
+def test_a_finished_check_keeps_a_deck_added_meanwhile() -> None:
+    baseline = add_subscription(empty_catalog(), _subscription())
+    live = add_subscription(baseline, _subscription("wset3-vin-en.apkg", id="en"))
+    checked = apply_release(
+        baseline,
+        owner="NayanChauveau",
+        repository="wine-theory-anki",
+        release=_release(),
+        checked_at="2026-10-16T03:00:00+00:00",
+        etag='"new"',
+    )
+    merged = merge_checked(live, {item.id for item in baseline.subscriptions}, checked)
+    french, english = merged.subscriptions
+    assert french.available_version == "v1.3.0"
+    assert french.etag == '"new"'
+    assert english.id == "en"
+    assert english.available_version is None
+
+
+def test_a_finished_check_does_not_reopen_an_installed_version() -> None:
+    baseline = add_subscription(empty_catalog(), _subscription())
+    checked = apply_release(
+        baseline,
+        owner="NayanChauveau",
+        repository="wine-theory-anki",
+        release=_release(),
+        checked_at="2026-10-16T03:00:00+00:00",
+        etag='"new"',
+    )
+    live = add_subscription(
+        empty_catalog(),
+        _subscription(installed_version="v1.3.0", installed_release_id=2),
+    )
+    merged = merge_checked(live, {"wset3-vin-fr.apkg"}, checked)
+    assert merged.subscriptions[0].available_version is None
+    assert merged.subscriptions[0].installed_version == "v1.3.0"
+
+
+def test_a_finished_install_does_not_drop_or_restore_rows() -> None:
+    baseline = add_subscription(empty_catalog(), _subscription())
+    added = add_subscription(baseline, _subscription("wset3-vin-en.apkg", id="en"))
+    removed = remove_subscription(baseline, "wset3-vin-fr.apkg")
+    installed = apply_release(
+        baseline,
+        owner="NayanChauveau",
+        repository="wine-theory-anki",
+        release=_release(),
+        checked_at="2026-10-16T03:00:00+00:00",
+        etag='"new"',
+    )
+    kept = merge_installed(added, {"wset3-vin-fr.apkg"}, installed)
+    assert [item.id for item in kept.subscriptions] == ["wset3-vin-fr.apkg", "en"]
+    assert kept.subscriptions[0].available_version == "v1.3.0"
+    assert merge_installed(removed, {"wset3-vin-fr.apkg"}, installed).subscriptions == ()

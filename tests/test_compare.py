@@ -60,6 +60,12 @@ def test_a_different_version_is_an_update() -> None:
     assert updated.available_version == "v1.10.0"
 
 
+def test_v_prefix_is_a_different_version() -> None:
+    updated = compare_subscription(_subscription(installed_version="v1.2.0"), _release("1.2.0"))
+    assert updated.available_version == "1.2.0"
+    assert updated.installed_version == "v1.2.0"
+
+
 def test_versions_are_not_sorted_as_text() -> None:
     updated = compare_subscription(
         _subscription(installed_version="v1.10.0"),

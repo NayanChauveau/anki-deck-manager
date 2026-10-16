@@ -61,7 +61,7 @@ Deck Manager lit la release **stable** du dépôt, celle que GitHub sert sur `GE
 Ensuite, pour le fichier suivi :
 
 - le fichier est absent de cette release : statut « fichier introuvable ». Aucun autre `.apkg` n’est pris à sa place ;
-- le tag de cette release n’est pas un numéro `vX.Y.Z` ou `X.Y.Z` : il est ignoré. `latest-main` ne propose donc pas de mise à jour ;
+- le tag de cette release n’est pas un numéro `vX.Y.Z` ou `X.Y.Z` : le statut est « Version non reconnue ». `latest-main` ne propose donc pas de mise à jour ;
 - le numéro est le même que la version installée : à jour ;
 - le numéro est différent : mise à jour proposée.
 
@@ -97,7 +97,7 @@ Actions : Ajouter, Vérifier, Importer la mise à jour, Ouvrir le dépôt, Retir
 
 À l’ajout, un texte rappelle que les notes absentes du paquet ne sont pas supprimées.
 
-Au démarrage, une seule notification par session. Elle indique la version installée et la nouvelle version, avec **Plus tard** et **Importer**. Plus tard dure jusqu’au prochain démarrage où une vérification est due. Plusieurs mises à jour sont listées ; les lignes cochées s’importent dans l’ordre.
+Au démarrage, une seule notification par session. Elle indique la version installée et la nouvelle version, avec **Plus tard** et **Importer**. Plus tard dure jusqu’au prochain démarrage. Plusieurs mises à jour sont listées ; les lignes cochées s’importent dans l’ordre.
 
 Les erreurs restent dans le tableau : hors ligne, dépôt absent, quota, fichier introuvable.
 

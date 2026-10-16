@@ -4,10 +4,8 @@ from __future__ import annotations
 
 
 def _load() -> None:
-    from . import importer as _importer
     from .ui import register
 
-    del _importer
     register()
 
 

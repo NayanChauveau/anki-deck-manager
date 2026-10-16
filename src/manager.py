@@ -9,9 +9,9 @@ from .domain import (
     GithubSource,
     ReleaseInfo,
     Subscription,
-    apkg_assets,
     check_is_due,
-    status_of,
+    find_apkg,
+    repository_key,
 )
 from .github import FetchResult, GithubError
 from .store import (
@@ -31,9 +31,9 @@ class AssetNotInRelease(Exception):
 
 
 def is_duplicate(catalog: Catalog, source: GithubSource) -> bool:
+    key = repository_key(source.owner, source.repository)
     return any(
-        item.owner.casefold() == source.owner.casefold()
-        and item.repository.casefold() == source.repository.casefold()
+        repository_key(item.owner, item.repository) == key
         and item.asset_name == source.asset_name
         for item in catalog.subscriptions
     )
@@ -44,10 +44,7 @@ def make_subscription(
     release: ReleaseInfo,
     subscription_id: str,
 ) -> Subscription:
-    asset = next(
-        (item for item in apkg_assets(release) if item.name == source.asset_name),
-        None,
-    )
+    asset = find_apkg(release, source.asset_name)
     if asset is None:
         raise AssetNotInRelease(source.asset_name)
     return Subscription(
@@ -66,7 +63,7 @@ def due_repositories(
     """Repositories whose newest check is older than the interval."""
     newest: dict[tuple[str, str], str | None] = {}
     for subscription in catalog.subscriptions:
-        key = (subscription.owner.casefold(), subscription.repository.casefold())
+        key = repository_key(subscription.owner, subscription.repository)
         checked = subscription.last_checked_at
         if key not in newest:
             newest[key] = checked
@@ -84,10 +81,11 @@ def due_repositories(
 
 
 def pending_updates(catalog: Catalog) -> tuple[Subscription, ...]:
+    """An update stays pending even when the last check failed."""
     return tuple(
         subscription
         for subscription in catalog.subscriptions
-        if status_of(subscription) == "update_available"
+        if subscription.available_version
     )
 
 
@@ -100,7 +98,7 @@ def check_catalog(
     """Refresh each repository once. ``fetch`` may raise :class:`GithubError`."""
     seen: set[tuple[str, str]] = set()
     for subscription in catalog.subscriptions:
-        key = (subscription.owner.casefold(), subscription.repository.casefold())
+        key = repository_key(subscription.owner, subscription.repository)
         if key in seen:
             continue
         seen.add(key)

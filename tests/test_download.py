@@ -32,8 +32,12 @@ def test_announced_size_stops_before_any_request(tmp_path: Path) -> None:
 def test_content_length_over_the_cap_writes_nothing(tmp_path: Path) -> None:
     destination = tmp_path / "deck.apkg"
 
+    def body():  # type: ignore[no-untyped-def]
+        raise AssertionError("body")
+        yield b""
+
     def open_url(url: str) -> DownloadResponse:
-        return DownloadResponse(200, {"content-length": "99"}, (b"nope",))
+        return DownloadResponse(200, {"content-length": "99"}, body())
 
     with pytest.raises(DownloadError) as caught:
         download_asset(
@@ -141,6 +145,12 @@ def test_the_temp_file_uses_the_asset_name() -> None:
         discard_package(path)
     assert not path.exists()
     assert not path.parent.exists()
+    nested = temporary_package("../../wset3-test-fr.apkg")
+    try:
+        assert nested.name == "wset3-test-fr.apkg"
+        assert ".." not in nested.parts
+    finally:
+        discard_package(nested)
     fallback = temporary_package("notes.txt")
     try:
         assert fallback.name == "deck.apkg"
@@ -154,5 +164,12 @@ def test_download_hosts() -> None:
     with pytest.raises(DownloadError) as caught:
         require_download_url("http://github.com/o/r/deck.apkg")
     assert caught.value.code == "redirect_rejected"
-    with pytest.raises(DownloadError):
+    with pytest.raises(DownloadError) as caught:
         require_download_url("https://codeload.github.com/o/r/legacy.tar.gz")
+    assert caught.value.code == "redirect_rejected"
+    with pytest.raises(DownloadError) as caught:
+        require_download_url("https://evil.objects.githubusercontent.com/package")
+    assert caught.value.code == "redirect_rejected"
+    with pytest.raises(DownloadError) as caught:
+        require_download_url("http://objects.githubusercontent.com/package")
+    assert caught.value.code == "redirect_rejected"

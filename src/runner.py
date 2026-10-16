@@ -11,13 +11,12 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .domain import compare_subscription, status_of
+from . import strings
+from .domain import compare_subscription, find_apkg, status_of
 from .download import DownloadError, discard_package, download_asset, temporary_package, urllib_open
 from .github import GithubError
 from .install import Prepared, load_latest, run_install_queue
 from .store import Catalog
-
-PROGRESS_LABEL = "Téléchargement"
 
 
 def start_installs(
@@ -36,18 +35,20 @@ def start_installs(
         return datetime.now(timezone.utc).isoformat()
 
     def prepare(subscription, done) -> None:  # type: ignore[no-untyped-def]
+        held: list[Path | None] = [None]
+
         def op(_col: object) -> Prepared:
             release = None
-            path: Path | None = None
             try:
                 release = load_latest(subscription)
                 compared = compare_subscription(subscription, release)
                 if status_of(compared) != "update_available":
                     return Prepared(release=release)
-                asset = next(
-                    item for item in release.assets if item.name == subscription.asset_name
-                )
+                asset = find_apkg(release, subscription.asset_name)
+                if asset is None:
+                    return Prepared(release=release, error="asset_missing")
                 path = temporary_package(asset.name)
+                held[0] = path
                 download_asset(
                     asset.download_url,
                     path,
@@ -58,13 +59,16 @@ def start_installs(
                 )
                 return Prepared(release=release, path=path)
             except (GithubError, DownloadError) as exc:
-                discard_package(path)
+                discard_package(held[0])
+                held[0] = None
                 return Prepared(release=release, error=exc.code)
 
         def success(prepared: Prepared) -> None:
             done(prepared)
 
         def failure(exc: Exception) -> None:
+            discard_package(held[0])
+            held[0] = None
             code = exc.code if isinstance(exc, (GithubError, DownloadError)) else "http_error"
             done(Prepared(error=code))
 
@@ -72,12 +76,12 @@ def start_installs(
             QueryOp(parent=mw, op=op, success=success)
             .failure(failure)
             .without_collection()
-            .with_progress(PROGRESS_LABEL)
+            .with_progress(strings.DOWNLOADING)
             .run_in_background()
         )
 
     def import_file(path: Path, done) -> None:  # type: ignore[no-untyped-def]
-        import_package(mw, str(path), lambda outcome: done(outcome.confirmed))
+        import_package(mw, path, lambda outcome: done(outcome.confirmed))
 
     run_install_queue(
         catalog,

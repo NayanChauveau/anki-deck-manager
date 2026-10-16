@@ -43,6 +43,33 @@ class FetchResult:
 Transport = Callable[[str, dict[str, str]], HttpResponse]
 
 
+def fetch_latest(
+    owner: str,
+    repository: str,
+    *,
+    etag: str | None = None,
+    transport: Transport | None = None,
+) -> FetchResult:
+    """Read GitHub's stable latest release for one repository."""
+    return _fetch(_release_api_url(owner, repository), etag=etag, transport=transport)
+
+
+def fetch_tag(
+    owner: str,
+    repository: str,
+    version: str,
+    *,
+    etag: str | None = None,
+    transport: Transport | None = None,
+) -> FetchResult:
+    """Read the release published at one version tag."""
+    return _fetch(
+        _release_api_url(owner, repository, version),
+        etag=etag,
+        transport=transport,
+    )
+
+
 def fetch_release(
     source: GithubSource,
     *,
@@ -51,7 +78,23 @@ def fetch_release(
     transport: Transport | None = None,
 ) -> FetchResult:
     """Read one release. ``latest`` follows GitHub's stable latest release."""
-    url = _release_url(source, latest=latest)
+    if latest:
+        return fetch_latest(source.owner, source.repository, etag=etag, transport=transport)
+    return fetch_tag(
+        source.owner,
+        source.repository,
+        source.version,
+        etag=etag,
+        transport=transport,
+    )
+
+
+def _fetch(
+    url: str,
+    *,
+    etag: str | None,
+    transport: Transport | None,
+) -> FetchResult:
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": API_VERSION,
@@ -114,13 +157,11 @@ class _ApiRedirectHandler(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _release_url(source: GithubSource, *, latest: bool) -> str:
-    owner = quote(source.owner)
-    repository = quote(source.repository)
-    base = f"https://api.github.com/repos/{owner}/{repository}"
-    if latest:
+def _release_api_url(owner: str, repository: str, version: str | None = None) -> str:
+    base = f"https://api.github.com/repos/{quote(owner)}/{quote(repository)}"
+    if version is None:
         return f"{base}/releases/latest"
-    return f"{base}/releases/tags/{quote(source.version, safe='')}"
+    return f"{base}/releases/tags/{quote(version, safe='')}"
 
 
 def _parse_release(payload: object) -> ReleaseInfo:

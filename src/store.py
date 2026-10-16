@@ -6,9 +6,9 @@ import Anki.
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
-from .domain import ReleaseInfo, Subscription, compare_subscription
+from .domain import ReleaseInfo, Subscription, compare_subscription, repository_key
 
 CONFIG_KEY = "deck_manager"
 SCHEMA_VERSION = 1
@@ -120,7 +120,7 @@ def apply_error(
         owner,
         repository,
         lambda subscription: _touch(
-            Subscription(**{**subscription.__dict__, "last_error": code}),
+            replace(subscription, last_error=code),
             checked_at=checked_at,
             etag=subscription.etag,
         ),
@@ -135,20 +135,56 @@ def _map_repo(catalog: Catalog, owner: str, repository: str, change) -> Catalog:
     return Catalog(tuple(updated))
 
 
-def _touch(subscription: Subscription, *, checked_at: str, etag: str | None) -> Subscription:
-    return Subscription(
-        **{
-            **subscription.__dict__,
-            "last_checked_at": checked_at,
-            "etag": etag,
-        }
+def merge_checked(live: Catalog, baseline_ids: set[str], checked: Catalog) -> Catalog:
+    """Copy a finished check onto rows that still exist, without touching installs."""
+    fresh = {item.id: item for item in checked.subscriptions}
+    rows: list[Subscription] = []
+    for item in live.subscriptions:
+        update = fresh.get(item.id)
+        if item.id not in baseline_ids or update is None:
+            rows.append(item)
+            continue
+        if item.installed_version and item.installed_version == update.available_version:
+            update = replace(
+                update,
+                available_release_id=None,
+                available_version=None,
+                available_asset_id=None,
+                last_error=None,
+            )
+        rows.append(
+            replace(
+                item,
+                display_name=update.display_name,
+                available_release_id=update.available_release_id,
+                available_version=update.available_version,
+                available_asset_id=update.available_asset_id,
+                last_error=update.last_error,
+                last_checked_at=update.last_checked_at,
+                etag=update.etag,
+            )
+        )
+    return Catalog(tuple(rows))
+
+
+def merge_installed(live: Catalog, baseline_ids: set[str], installed: Catalog) -> Catalog:
+    """Keep decks added or removed while an install was running."""
+    fresh = {item.id: item for item in installed.subscriptions}
+    return Catalog(
+        tuple(
+            fresh[item.id] if item.id in baseline_ids and item.id in fresh else item
+            for item in live.subscriptions
+        )
     )
 
 
+def _touch(subscription: Subscription, *, checked_at: str, etag: str | None) -> Subscription:
+    return replace(subscription, last_checked_at=checked_at, etag=etag)
+
+
 def _same_repo(subscription: Subscription, owner: str, repository: str) -> bool:
-    return (
-        subscription.owner.casefold() == owner.casefold()
-        and subscription.repository.casefold() == repository.casefold()
+    return repository_key(subscription.owner, subscription.repository) == repository_key(
+        owner, repository
     )
 
 

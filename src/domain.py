@@ -13,7 +13,7 @@ release whose tag is not a version number is ignored.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote, urlsplit
 
@@ -133,12 +133,20 @@ def is_version_tag(tag: str) -> bool:
     return re.fullmatch(_VERSION, tag) is not None
 
 
+def repository_key(owner: str, repository: str) -> tuple[str, str]:
+    return (owner.casefold(), repository.casefold())
+
+
 def apkg_assets(release: ReleaseInfo) -> tuple[ReleaseAsset, ...]:
     return tuple(
         asset
         for asset in release.assets
         if asset.state == "uploaded" and asset.name.lower().endswith(".apkg")
     )
+
+
+def find_apkg(release: ReleaseInfo, name: str) -> ReleaseAsset | None:
+    return next((asset for asset in apkg_assets(release) if asset.name == name), None)
 
 
 def status_of(subscription: Subscription) -> str:
@@ -155,12 +163,9 @@ def status_of(subscription: Subscription) -> str:
 
 def compare_subscription(subscription: Subscription, release: ReleaseInfo) -> Subscription:
     """Offer the latest release when its version differs. Do not sort versions."""
-    match = next(
-        (asset for asset in apkg_assets(release) if asset.name == subscription.asset_name),
-        None,
-    )
+    match = find_apkg(release, subscription.asset_name)
     if match is None:
-        return _replace(
+        return replace(
             subscription,
             available_release_id=None,
             available_version=None,
@@ -168,7 +173,7 @@ def compare_subscription(subscription: Subscription, release: ReleaseInfo) -> Su
             last_error="asset_missing",
         )
     if not is_version_tag(release.tag):
-        return _replace(
+        return replace(
             subscription,
             available_release_id=None,
             available_version=None,
@@ -176,7 +181,7 @@ def compare_subscription(subscription: Subscription, release: ReleaseInfo) -> Su
             last_error="unsupported_version",
         )
     if release.tag == subscription.installed_version:
-        return _replace(
+        return replace(
             subscription,
             display_name=match.display_name,
             installed_release_id=release.release_id,
@@ -186,11 +191,32 @@ def compare_subscription(subscription: Subscription, release: ReleaseInfo) -> Su
             available_asset_id=None,
             last_error=None,
         )
-    return _replace(
+    return replace(
         subscription,
         available_release_id=release.release_id,
         available_version=release.tag,
         available_asset_id=match.asset_id,
+        last_error=None,
+    )
+
+
+def commit_install(
+    subscription: Subscription,
+    release: ReleaseInfo,
+    *,
+    installed_at: str,
+) -> Subscription:
+    asset = find_apkg(release, subscription.asset_name)
+    return replace(
+        subscription,
+        display_name=asset.display_name if asset else subscription.display_name,
+        installed_release_id=release.release_id,
+        installed_version=release.tag,
+        installed_asset_id=asset.asset_id if asset else subscription.installed_asset_id,
+        available_release_id=None,
+        available_version=None,
+        available_asset_id=None,
+        last_installed_at=installed_at,
         last_error=None,
     )
 
@@ -209,9 +235,3 @@ def check_is_due(
 def _require_name(value: str, pattern: str, code: str) -> None:
     if not re.fullmatch(pattern, value) or value in {".", ".."}:
         raise UrlError(code)
-
-
-def _replace(subscription: Subscription, **changes: object) -> Subscription:
-    data = subscription.__dict__.copy()
-    data.update(changes)
-    return Subscription(**data)

@@ -20,7 +20,11 @@ class ImportOutcome:
     confirmed: bool
 
 
-def import_package(mw: object, path: str, on_done: Callable[[ImportOutcome], None]) -> None:
+def import_package(
+    mw: object,
+    path: str | Path,
+    on_done: Callable[[ImportOutcome], None],
+) -> None:
     """Show the same dialog as File → Import and report the result later."""
     global _import_open
 

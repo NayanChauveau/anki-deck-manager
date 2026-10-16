@@ -33,7 +33,6 @@ NO_UPDATE = "Aucune mise à jour à importer."
 NO_SELECTION = "Sélectionnez un deck."
 DUPLICATE = "Ce fichier est déjà suivi."
 ASSET_MISSING = "Ce fichier est absent de la release."
-CHECKING = "Vérification…"
 DOWNLOADING = "Téléchargement"
 LATER = "Plus tard"
 
