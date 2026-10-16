@@ -61,6 +61,7 @@ Deck Manager lit la release **stable** du dépôt, celle que GitHub sert sur `GE
 Ensuite, pour le fichier suivi :
 
 - le fichier est absent de cette release : statut « fichier introuvable ». Aucun autre `.apkg` n’est pris à sa place ;
+- le tag de cette release n’est pas un numéro `vX.Y.Z` ou `X.Y.Z` : il est ignoré. `latest-main` ne propose donc pas de mise à jour ;
 - le numéro est le même que la version installée : à jour ;
 - le numéro est différent : mise à jour proposée.
 
@@ -117,9 +118,9 @@ Il n’y a pas d’interrupteur pour désactiver un suivi.
 
 ## Dans ce dépôt aujourd’hui
 
-Le contrat ci-dessus est celui du produit. Le code présent couvre le squelette Anki, la lecture de l’URL, l’appel à l’API GitHub, la comparaison des numéros et le stockage des suivis. La détection d’un import réussi est écrite et testée sans lancer Anki.
+Le contrat ci-dessus est celui du produit. Le code présent couvre la lecture de l’URL, l’API GitHub, la comparaison des numéros, le stockage, le téléchargement (hôtes, taille, annulation entre les blocs) et l’import un fichier à la fois. La version n’est enregistrée que si le dialogue Anki confirme l’import. Ces chemins sont testés sans lancer Anki.
 
-Pas encore dans l’add-on chargé par Anki : le téléchargement du `.apkg`, la fenêtre, le menu Outils, la notification au démarrage. Redémarrer Anki ne montre donc pas encore Deck Manager dans les menus.
+Pas encore visibles dans Anki : la fenêtre, le menu Outils, la notification au démarrage. Redémarrer Anki ne montre donc pas encore Deck Manager dans les menus.
 
 Installation de développement, une fois Anki 26.09 ouvert au moins une fois :
 

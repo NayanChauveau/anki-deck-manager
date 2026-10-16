@@ -6,7 +6,8 @@ No Anki imports. A deck is the file name inside a versioned release URL:
 
 The version is ``vX.Y.Z`` or ``X.Y.Z``. A different version on GitHub's latest
 stable release is an update. The same version is current, even if the file
-bytes changed: publishing a change means cutting a new version.
+bytes changed: publishing a change means cutting a new version. A latest
+release whose tag is not a version number is ignored.
 """
 
 from __future__ import annotations
@@ -114,7 +115,7 @@ def parse_github_url(text: str) -> GithubSource:
         repository = repository[: -len(".git")]
     _require_name(owner, _OWNER, "owner")
     _require_name(repository, _REPO, "repository")
-    if not re.fullmatch(_VERSION, version):
+    if not is_version_tag(version):
         raise UrlError("version")
     if not asset_name.lower().endswith(".apkg"):
         raise UrlError("asset")
@@ -126,6 +127,10 @@ def parse_github_url(text: str) -> GithubSource:
         version=version,
         asset_name=asset_name,
     )
+
+
+def is_version_tag(tag: str) -> bool:
+    return re.fullmatch(_VERSION, tag) is not None
 
 
 def apkg_assets(release: ReleaseInfo) -> tuple[ReleaseAsset, ...]:
@@ -161,6 +166,14 @@ def compare_subscription(subscription: Subscription, release: ReleaseInfo) -> Su
             available_version=None,
             available_asset_id=None,
             last_error="asset_missing",
+        )
+    if not is_version_tag(release.tag):
+        return _replace(
+            subscription,
+            available_release_id=None,
+            available_version=None,
+            available_asset_id=None,
+            last_error="unsupported_version",
         )
     if release.tag == subscription.installed_version:
         return _replace(

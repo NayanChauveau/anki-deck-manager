@@ -1,7 +1,7 @@
 """Deck Manager add-on entry point.
 
-Anki loads this package from the add-on folder. The manager window, GitHub
-client and startup check are intentionally absent at this stage.
+Anki loads this package from the add-on folder. The manager window and the
+startup check are intentionally absent at this stage.
 """
 
 from __future__ import annotations

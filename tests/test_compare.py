@@ -69,6 +69,14 @@ def test_versions_are_not_sorted_as_text() -> None:
     assert updated.installed_version == "v1.10.0"
 
 
+def test_a_tag_that_is_not_a_version_is_not_an_update() -> None:
+    updated = compare_subscription(_subscription(), _release("latest-main"))
+    assert status_of(updated) == "error"
+    assert updated.last_error == "unsupported_version"
+    assert updated.installed_version == "v1.9.0"
+    assert updated.available_version is None
+
+
 def test_missing_asset_is_not_replaced() -> None:
     updated = compare_subscription(
         _subscription(),
