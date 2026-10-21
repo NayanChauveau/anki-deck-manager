@@ -4,6 +4,8 @@ An add-on for Anki Desktop that installs `.apkg` decks published on GitHub and o
 
 Requires Anki **26.09** or later. Open **Tools → Deck Manager**. No account or token is needed: tracked repositories are public. The window follows Anki’s language: French or English, with English used for all other languages.
 
+![Deck Manager showing tracked decks, versions, and update status](docs/images/deck-manager.png)
+
 ## Installation
 
 Download the `.ankiaddon` file from the [latest release](https://github.com/NayanChauveau/anki-deck-manager/releases/latest), then double-click it. Alternatively, in Anki, choose **Tools → Add-ons → Install from file**. Restart Anki.
