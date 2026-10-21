@@ -6,7 +6,7 @@ Requires Anki **26.09** or later. Open **Tools → Deck Manager**. No account or
 
 ## Installation
 
-Download the `.ankiaddon` file from the [latest release](https://github.com/NayanChauveau/anki-deckdock/releases/latest), then double-click it. Alternatively, in Anki, choose **Tools → Add-ons → Install from file**. Restart Anki.
+Download the `.ankiaddon` file from the [latest release](https://github.com/NayanChauveau/anki-deck-manager/releases/latest), then double-click it. Alternatively, in Anki, choose **Tools → Add-ons → Install from file**. Restart Anki.
 
 ## Add a deck
 
