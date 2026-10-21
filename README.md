@@ -1,60 +1,60 @@
 # Deck Manager
 
-Add-on pour Anki Desktop. Il installe un deck `.apkg` publié sur GitHub, et propose une mise à jour quand le numéro de version change.
+An add-on for Anki Desktop that installs `.apkg` decks published on GitHub and offers updates when their version numbers change.
 
-Anki **26.09** ou plus récent. Menu **Outils → Deck Manager**. Pas de compte et pas de token : les dépôts suivis sont publics. La fenêtre suit la langue d’Anki : français ou anglais. Les autres langues utilisent l’anglais.
+Requires Anki **26.09** or later. Open **Tools → Deck Manager**. No account or token is needed: tracked repositories are public. The window follows Anki’s language: French or English, with English used for all other languages.
 
-## Installer
+## Installation
 
-Télécharge le `.ankiaddon` de la [dernière release](https://github.com/NayanChauveau/anki-deckdock/releases/latest), puis double-clique dessus. Ou, dans Anki : **Outils → Extensions → Installer depuis un fichier**. Redémarre Anki.
+Download the `.ankiaddon` file from the [latest release](https://github.com/NayanChauveau/anki-deckdock/releases/latest), then double-click it. Alternatively, in Anki, choose **Tools → Add-ons → Install from file**. Restart Anki.
 
-## Ajouter un deck
+## Add a deck
 
-Colle une adresse de cette forme, et seulement celle-là :
+Paste a URL in exactly this format:
 
 ```text
-https://github.com/propriétaire/dépôt/releases/download/v1.2.0/mon-deck.apkg
+https://github.com/owner/repository/releases/download/v1.2.0/my-deck.apkg
 ```
 
-Le numéro (`v1.2.0` ou `1.2.0`) et le nom du fichier font partie de l’adresse. Le nom du fichier reste le même d’une version à l’autre.
+The version number (`v1.2.0` or `1.2.0`) and filename are part of the URL. The filename must stay the same across releases.
 
-Une page de dépôt, un lien « latest », ou un tag comme `latest-main` est refusé. Deux fichiers du même dépôt, par exemple un français et un anglais, font deux suivis.
+Repository pages, “latest” links, and tags such as `latest-main` are rejected. Two files from the same repository, such as French and English editions, are tracked separately.
 
-Le nom affiché est le label du fichier sur GitHub, sinon le nom du fichier sans `.apkg`.
+The display name is the asset’s label on GitHub, or its filename without `.apkg` if no label is set.
 
-## Au quotidien
+## Everyday use
 
-Au démarrage, s’il existe une nouvelle version, une fenêtre propose **Plus tard** ou **Importer**. Plus tard dure jusqu’au prochain démarrage. Plusieurs mises à jour se cochèrent, puis s’importent l’une après l’autre.
+At startup, if a new version is available, a window offers **Later** or **Import update**. Choosing **Later** postpones the update until the next startup. When several updates are available, select them using the checkboxes; they are imported one at a time.
 
-Dans la fenêtre, le tableau montre le deck, la source, la version et le statut.
+The manager window shows each deck, its source, version, and status.
 
-- **Vérifier** regarde tout de suite.
-- **Importer** télécharge le fichier, puis ouvre le dialogue d’import d’Anki, le même que **Fichier → Importer**. Les cases de ce dialogue restent les tiennes. La version n’est enregistrée que si tu confirmes.
-- **Ouvrir le dépôt** affiche la page GitHub.
-- **Retirer** enlève le suivi. Le deck reste dans Anki.
+- **Check** checks for updates immediately.
+- **Import update** downloads the file and opens Anki’s import dialog, the same one used by **File → Import**. Your import options remain yours to choose. The version is recorded only after you confirm the import.
+- **Open repository** opens the GitHub repository page.
+- **Remove** stops tracking the deck. The deck stays in Anki.
 
-Une vérification automatique a lieu au plus toutes les 24 heures par dépôt, sans bloquer Anki. **Vérifier** ignore ce délai. Hors ligne, dépôt absent, quota GitHub ou fichier introuvable : le statut reste dans le tableau.
+Automatic checks run at most once every 24 hours per repository, without blocking Anki. **Check** bypasses this interval. If you are offline, the repository is unavailable, GitHub’s rate limit is reached, or the file is missing, the table shows the corresponding status.
 
-## Ce qu’une mise à jour veut dire
+## What counts as an update
 
-Deck Manager lit la release stable du dépôt.
+Deck Manager reads the repository’s latest stable release.
 
-- Le numéro a changé : une mise à jour est proposée.
-- Le numéro est le même : rien à faire, même si le fichier a été remplacé.
-- `v1.2.0` et `1.2.0` sont deux numéros différents.
-- Les numéros ne sont pas classés. `v1.10` n’est pas « plus grand » que `v1.9` : GitHub désigne la release stable, Deck Manager compare les deux textes.
+- The version number has changed: an update is offered.
+- The version number is unchanged: no update is offered, even if the file has been replaced.
+- `v1.2.0` and `1.2.0` are treated as different versions.
+- Version numbers are not sorted. `v1.10` is not considered “greater” than `v1.9`: GitHub determines the latest stable release, and Deck Manager compares the two version strings.
 
-L’import ajoute et met à jour les cartes. Il ne supprime pas celles qui ont disparu du nouveau paquet.
+Importing adds and updates cards. It does not delete cards that are missing from the new package.
 
-## Publier un deck
+## Publish a deck
 
-1. Une release GitHub par version, avec le tag `vX.Y.Z` (ou `X.Y.Z`).
-2. Le `.apkg` garde le même nom de fichier.
-3. Donne l’adresse `…/releases/download/vX.Y.Z/fichier.apkg`.
-4. Pour changer le contenu, publie un **nouveau** numéro. Ne remplace pas le fichier d’une version déjà publiée.
+1. Create one GitHub release per version, tagged `vX.Y.Z` (or `X.Y.Z`).
+2. Keep the same `.apkg` filename across releases.
+3. Share the URL `…/releases/download/vX.Y.Z/file.apkg`.
+4. To change the content, publish a **new** version number. Do not replace the file in an existing release.
 
-Un dépôt qui ne publie que `latest-main` ne peut pas être suivi.
+Repositories that only publish `latest-main` cannot be tracked.
 
-## Licence
+## License
 
-[GNU AGPL v3.0](https://www.gnu.org/licenses/agpl-3.0.html) ou ultérieure.
+[GNU AGPL v3.0](https://www.gnu.org/licenses/agpl-3.0.html) or later.
